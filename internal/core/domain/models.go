@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrNotFound = errors.New("not found")
 
 type EntityType string
 
@@ -19,6 +24,9 @@ type Translation struct {
 	FieldValue string
 	UpdatedAt  time.Time
 }
+
+// Translations indexes Translation records by field name.
+type Translations map[string]Translation
 
 type Product struct {
 	ID         string

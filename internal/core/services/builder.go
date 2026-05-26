@@ -29,7 +29,7 @@ func (b *DocumentBuilder) BuildProductDocument(ctx context.Context, p domain.Pro
 	}
 
 	doc := b.initializeDocument(p, translations)
-	b.populateProductNames(&doc, translations, locales, p.ID, p.SKU)
+	b.populateProductNames(&doc, translations, fetchLocales, p.ID, p.SKU)
 	b.populateAttributes(&doc, attrs, specs, translations)
 
 	return doc, nil
