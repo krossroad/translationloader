@@ -21,15 +21,15 @@ func TestMapToDTO(t *testing.T) {
 		Brand: domain.BrandInfo{
 			Code: "castrol",
 			Label: domain.Label{
-				En: "Castrol",
-				Th: "คาสตรอล",
+				"en": "Castrol",
+				"th": "คาสตรอล",
 			},
 		},
 		OilGrade: domain.Property{
 			Code: "5w30",
 			Label: domain.Label{
-				En: "5W-30",
-				Th: "5W-30",
+				"en": "5W-30",
+				"th": "5W-30",
 			},
 		},
 		Attributes: map[string]string{
@@ -45,7 +45,7 @@ func TestMapToDTO(t *testing.T) {
 	assert.Equal(t, doc.ProductName[0].Locale, dto.ProductName[0].Locale)
 	assert.Equal(t, doc.ProductName[0].Data, dto.ProductName[0].Data)
 	assert.Equal(t, doc.Brand.Code, dto.Brand.Code)
-	assert.Equal(t, doc.Brand.Label.En, dto.Brand.Label.En)
+	assert.Equal(t, doc.Brand.Label["en"], dto.Brand.Label["en"])
 	assert.Equal(t, doc.OilGrade.Code, dto.OilGrade.Code)
 	assert.Equal(t, doc.Attributes["viscosity"], dto.Attributes["viscosity"])
 }
@@ -67,14 +67,14 @@ func TestSyncApplication_RunSync(t *testing.T) {
 		doc1 := domain.ProductDocument{UUID: "p-1", SKU: "S1"}
 		doc2 := domain.ProductDocument{UUID: "p-2", SKU: "S2"}
 
-		mockRepo.On("GetProduct", ctx, "p-1").Return(domain.Product{ID: "p-1", SKU: "S1"}, nil).Once()
-		mockRepo.On("GetAttributesByProductID", ctx, "p-1").Return([]domain.Attribute{}, nil).Once()
-		mockRepo.On("GetSpecificationsByProductID", ctx, "p-1").Return([]domain.ProductSpecification{}, nil).Once()
+		mockRepo.On("GetProduct", mock.Anything, "p-1").Return(domain.Product{ID: "p-1", SKU: "S1"}, nil).Once()
+		mockRepo.On("GetAttributesByProductID", mock.Anything, "p-1").Return([]domain.Attribute{}, nil).Once()
+		mockRepo.On("GetSpecificationsByProductID", mock.Anything, "p-1").Return([]domain.ProductSpecification{}, nil).Once()
 		mockBuilder.On("BuildProductDocument", ctx, mock.Anything, mock.Anything, mock.Anything, handlerLocales).Return(doc1, nil).Once()
 
-		mockRepo.On("GetProduct", ctx, "p-2").Return(domain.Product{ID: "p-2", SKU: "S2"}, nil).Once()
-		mockRepo.On("GetAttributesByProductID", ctx, "p-2").Return([]domain.Attribute{}, nil).Once()
-		mockRepo.On("GetSpecificationsByProductID", ctx, "p-2").Return([]domain.ProductSpecification{}, nil).Once()
+		mockRepo.On("GetProduct", mock.Anything, "p-2").Return(domain.Product{ID: "p-2", SKU: "S2"}, nil).Once()
+		mockRepo.On("GetAttributesByProductID", mock.Anything, "p-2").Return([]domain.Attribute{}, nil).Once()
+		mockRepo.On("GetSpecificationsByProductID", mock.Anything, "p-2").Return([]domain.ProductSpecification{}, nil).Once()
 		mockBuilder.On("BuildProductDocument", ctx, mock.Anything, mock.Anything, mock.Anything, handlerLocales).Return(doc2, nil).Once()
 
 		res, err := app.RunSync(ctx, productIDs)
@@ -85,12 +85,14 @@ func TestSyncApplication_RunSync(t *testing.T) {
 	})
 
 	t.Run("partial failure", func(t *testing.T) {
-		mockRepo.On("GetProduct", ctx, "p-1").Return(domain.Product{}, assert.AnError).Once()
-		
+		mockRepo.On("GetProduct", mock.Anything, "p-1").Return(domain.Product{}, assert.AnError).Once()
+		mockRepo.On("GetAttributesByProductID", mock.Anything, "p-1").Maybe().Return([]domain.Attribute{}, nil)
+		mockRepo.On("GetSpecificationsByProductID", mock.Anything, "p-1").Maybe().Return([]domain.ProductSpecification{}, nil)
+
 		doc2 := domain.ProductDocument{UUID: "p-2", SKU: "S2"}
-		mockRepo.On("GetProduct", ctx, "p-2").Return(domain.Product{ID: "p-2", SKU: "S2"}, nil).Once()
-		mockRepo.On("GetAttributesByProductID", ctx, "p-2").Return([]domain.Attribute{}, nil).Once()
-		mockRepo.On("GetSpecificationsByProductID", ctx, "p-2").Return([]domain.ProductSpecification{}, nil).Once()
+		mockRepo.On("GetProduct", mock.Anything, "p-2").Return(domain.Product{ID: "p-2", SKU: "S2"}, nil).Once()
+		mockRepo.On("GetAttributesByProductID", mock.Anything, "p-2").Return([]domain.Attribute{}, nil).Once()
+		mockRepo.On("GetSpecificationsByProductID", mock.Anything, "p-2").Return([]domain.ProductSpecification{}, nil).Once()
 		mockBuilder.On("BuildProductDocument", ctx, mock.Anything, mock.Anything, mock.Anything, handlerLocales).Return(doc2, nil).Once()
 
 		res, err := app.RunSync(ctx, productIDs)
@@ -130,4 +132,56 @@ func TestSyncApplication_Close(t *testing.T) {
 	assert.NotPanics(t, func() {
 		app.Close()
 	})
+}
+
+// TestNewSyncApplicationFromPorts verifies that SyncApplication can be constructed
+// from port interfaces alone, with no concrete adapter or pgxpool dependency.
+// This test currently fails to compile because NewSyncApplicationFromHandler does not
+// exist — the compilation failure proves the layer boundary fix requires a new constructor.
+func TestNewSyncApplicationFromPorts(t *testing.T) {
+	mockRepo := mocks.NewProductRepository(t)
+	mockBuilder := mocks.NewDocumentBuilder(t)
+	locales := []string{"en", "th"}
+
+	// After the fix, NewSyncApplicationFromHandler must accept a *SyncHandler built
+	// purely from port interfaces, with no AppConfig or pgxpool involvement.
+	handler := NewSyncHandler(mockRepo, mockBuilder, locales)
+	app := NewSyncApplicationFromHandler(handler)
+	assert.NotNil(t, app)
+}
+
+// TestMapToDTO_LabelIsLocaleMap verifies that mapToDTO propagates an arbitrary locale
+// key (e.g. "de") from domain.Label into dto.Label.
+// This test currently fails to compile because domain.Label and dto.Label are structs
+// with fixed En/Th fields, not maps — the compilation failure proves the fix requires
+// replacing both structs with map[string]string.
+func TestMapToDTO_LabelIsLocaleMap(t *testing.T) {
+	doc := domain.ProductDocument{
+		UUID: "p-3",
+		SKU:  "SKU-3",
+		Brand: domain.BrandInfo{
+			Code: "castrol",
+			// domain.Label must be map[string]string after the fix.
+			Label: domain.Label{
+				"en": "Castrol",
+				"th": "คาสตรอล",
+				"de": "Castrol DE",
+			},
+		},
+		OilGrade: domain.Property{
+			Code: "5w30",
+			Label: domain.Label{
+				"en": "5W-30",
+				"th": "5W-30",
+				"de": "5W-30 DE",
+			},
+		},
+	}
+
+	result := mapToDTO(doc)
+
+	assert.Equal(t, "Castrol DE", result.Brand.Label["de"],
+		"dto.Label must expose arbitrary locale keys, not just En/Th fields")
+	assert.Equal(t, "5W-30 DE", result.OilGrade.Label["de"],
+		"dto.Property.Label must expose arbitrary locale keys")
 }

@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
+	"maps"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rikeshs/translationloader/internal/adapters/cache"
 	"github.com/rikeshs/translationloader/internal/adapters/repository"
 	"github.com/rikeshs/translationloader/internal/core/domain"
 	"github.com/rikeshs/translationloader/internal/core/domain/dto"
-	"github.com/rikeshs/translationloader/internal/core/ports"
 	"github.com/rikeshs/translationloader/internal/core/services"
 )
 
@@ -22,65 +21,52 @@ type AppConfig struct {
 }
 
 type SyncApplication struct {
-	pool        *pgxpool.Pool
 	syncHandler *SyncHandler
 }
 
 func NewSyncApplication(ctx context.Context, cfg AppConfig) (*SyncApplication, error) {
-	app := &SyncApplication{}
-
-	if err := app.initDB(ctx, cfg.DBDSN); err != nil {
-		return nil, err
-	}
-
-	cacheDriver, err := app.initDrivers(cfg.Cache)
+	pool, err := initDB(ctx, cfg.DBDSN)
 	if err != nil {
-		app.Close()
 		return nil, err
 	}
 
-	loader, productRepo := app.initRepositories(cacheDriver, cfg.Cache.TTL)
-	app.initServices(loader, productRepo, cfg.Locales)
+	cacheDriver, err := cache.NewDriver(cfg.Cache)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
 
-	return app, nil
+	pgTranslationLoader := repository.NewPostgresTranslationLoader(pool)
+	cachedTranslationLoader := cache.NewCachedTranslationLoader(pgTranslationLoader, cacheDriver, cfg.Cache.TTL)
+	productRepo := repository.NewPostgresProductRepository(pool)
+
+	docBuilder := services.NewDocumentBuilder(cachedTranslationLoader)
+	handler := NewSyncHandler(productRepo, docBuilder, cfg.Locales)
+
+	return &SyncApplication{syncHandler: handler}, nil
 }
 
-func (a *SyncApplication) initDB(ctx context.Context, dsn string) error {
+// NewSyncApplicationFromHandler creates a SyncApplication from an already-wired handler.
+// Use this when adapter construction is handled outside the app layer (e.g., in cmd/).
+func NewSyncApplicationFromHandler(handler *SyncHandler) *SyncApplication {
+	return &SyncApplication{syncHandler: handler}
+}
+
+func initDB(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		return fmt.Errorf("could not connect to database: %w", err)
+		return nil, fmt.Errorf("could not connect to database: %w", err)
 	}
 
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		return fmt.Errorf("could not ping database: %w", err)
+		return nil, fmt.Errorf("could not ping database: %w", err)
 	}
 
-	a.pool = pool
-	return nil
+	return pool, nil
 }
 
-func (a *SyncApplication) initDrivers(cfg cache.Config) (ports.CacheDriver, error) {
-	return cache.NewDriver(cfg)
-}
-
-func (a *SyncApplication) initRepositories(cacheDriver ports.CacheDriver, cacheTTL time.Duration) (ports.TranslationLoader, ports.ProductRepository) {
-	pgTranslationLoader := repository.NewPostgresTranslationLoader(a.pool)
-	cachedTranslationLoader := cache.NewCachedTranslationLoader(pgTranslationLoader, cacheDriver, cacheTTL)
-	productRepo := repository.NewPostgresProductRepository(a.pool)
-	return cachedTranslationLoader, productRepo
-}
-
-func (a *SyncApplication) initServices(loader ports.TranslationLoader, productRepo ports.ProductRepository, locales []string) {
-	docBuilder := services.NewDocumentBuilder(loader)
-	a.syncHandler = NewSyncHandler(productRepo, docBuilder, locales)
-}
-
-func (a *SyncApplication) Close() {
-	if a.pool != nil {
-		a.pool.Close()
-	}
-}
+func (a *SyncApplication) Close() {}
 
 func (a *SyncApplication) RunSync(ctx context.Context, productIDs []string) ([]dto.ElasticsearchDocument, error) {
 	var results []dto.ElasticsearchDocument
@@ -107,24 +93,21 @@ func mapToDTO(d domain.ProductDocument) dto.ElasticsearchDocument {
 		}
 	}
 
+	brandLabel := dto.Label(maps.Clone(d.Brand.Label))
+	oilGradeLabel := dto.Label(maps.Clone(d.OilGrade.Label))
+
 	return dto.ElasticsearchDocument{
 		UUID:       d.UUID,
 		SKU:        d.SKU,
 		PartNumber: d.PartNumber,
 		Brand: dto.Brand{
-			Code: d.Brand.Code,
-			Label: dto.Label{
-				En: d.Brand.Label.En,
-				Th: d.Brand.Label.Th,
-			},
+			Code:  d.Brand.Code,
+			Label: brandLabel,
 		},
 		ProductName: productNames,
 		OilGrade: dto.Property{
-			Code: d.OilGrade.Code,
-			Label: dto.Label{
-				En: d.OilGrade.Label.En,
-				Th: d.OilGrade.Label.Th,
-			},
+			Code:  d.OilGrade.Code,
+			Label: oilGradeLabel,
 		},
 		Attributes: d.Attributes,
 	}

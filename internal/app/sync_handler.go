@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/rikeshs/translationloader/internal/core/domain"
 	"github.com/rikeshs/translationloader/internal/core/ports"
 )
@@ -25,19 +27,43 @@ func NewSyncHandler(productRepo ports.ProductRepository, docBuilder ports.Docume
 }
 
 func (h *SyncHandler) SyncProduct(ctx context.Context, id string) (domain.ProductDocument, error) {
-	p, err := h.productRepo.GetProduct(ctx, id)
-	if err != nil {
-		return domain.ProductDocument{}, fmt.Errorf("failed to fetch product %s: %w", id, err)
-	}
+	var (
+		p     domain.Product
+		attrs []domain.Attribute
+		specs []domain.ProductSpecification
+	)
 
-	attrs, err := h.productRepo.GetAttributesByProductID(ctx, id)
-	if err != nil {
-		return domain.ProductDocument{}, fmt.Errorf("failed to fetch attributes for product %s: %w", id, err)
-	}
+	g, gctx := errgroup.WithContext(ctx)
 
-	specs, err := h.productRepo.GetSpecificationsByProductID(ctx, id)
-	if err != nil {
-		return domain.ProductDocument{}, fmt.Errorf("failed to fetch specifications for product %s: %w", id, err)
+	g.Go(func() error {
+		var err error
+		p, err = h.productRepo.GetProduct(gctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to fetch product %s: %w", id, err)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		attrs, err = h.productRepo.GetAttributesByProductID(gctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to fetch attributes for product %s: %w", id, err)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		specs, err = h.productRepo.GetSpecificationsByProductID(gctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to fetch specifications for product %s: %w", id, err)
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return domain.ProductDocument{}, err
 	}
 
 	return h.docBuilder.BuildProductDocument(ctx, p, attrs, specs, h.locales)
