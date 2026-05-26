@@ -35,44 +35,37 @@ func (_m *CacheDriver) Delete(ctx context.Context, key string) error {
 }
 
 // Get provides a mock function with given fields: ctx, key
-func (_m *CacheDriver) Get(ctx context.Context, key string) (map[string][]domain.Translation, bool, error) {
+func (_m *CacheDriver) Get(ctx context.Context, key string) (map[string]domain.Translations, error) {
 	ret := _m.Called(ctx, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Get")
 	}
 
-	var r0 map[string][]domain.Translation
-	var r1 bool
-	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (map[string][]domain.Translation, bool, error)); ok {
+	var r0 map[string]domain.Translations
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (map[string]domain.Translations, error)); ok {
 		return rf(ctx, key)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) map[string][]domain.Translation); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) map[string]domain.Translations); ok {
 		r0 = rf(ctx, key)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[string][]domain.Translation)
+			r0 = ret.Get(0).(map[string]domain.Translations)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string) bool); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
 		r1 = rf(ctx, key)
 	} else {
-		r1 = ret.Get(1).(bool)
+		r1 = ret.Error(1)
 	}
 
-	if rf, ok := ret.Get(2).(func(context.Context, string) error); ok {
-		r2 = rf(ctx, key)
-	} else {
-		r2 = ret.Error(2)
-	}
-
-	return r0, r1, r2
+	return r0, r1
 }
 
 // Set provides a mock function with given fields: ctx, key, value, ttl
-func (_m *CacheDriver) Set(ctx context.Context, key string, value map[string][]domain.Translation, ttl time.Duration) error {
+func (_m *CacheDriver) Set(ctx context.Context, key string, value map[string]domain.Translations, ttl time.Duration) error {
 	ret := _m.Called(ctx, key, value, ttl)
 
 	if len(ret) == 0 {
@@ -80,7 +73,7 @@ func (_m *CacheDriver) Set(ctx context.Context, key string, value map[string][]d
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, map[string][]domain.Translation, time.Duration) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, map[string]domain.Translations, time.Duration) error); ok {
 		r0 = rf(ctx, key, value, ttl)
 	} else {
 		r0 = ret.Error(0)
