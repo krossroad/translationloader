@@ -22,8 +22,8 @@ func NewCachedTranslationLoader(underlying ports.TranslationLoader, driver ports
 	}
 }
 
-func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []string, locales []string) (map[string][]domain.Translation, error) {
-	results := make(map[string][]domain.Translation)
+func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []string, locales []string) (map[string]domain.Translations, error) {
+	results := make(map[string]domain.Translations)
 	var missingIDs []string
 
 	for _, id := range entityIDs {
@@ -47,12 +47,10 @@ func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []stri
 			continue
 		}
 
-		// Flatten nested map back to []Translation for the BulkLoad result
-		var entityTrans []domain.Translation
+		// Flatten locale buckets into a single Translations slice for the BulkLoad result
+		var entityTrans domain.Translations
 		for _, locale := range locales {
-			for _, t := range cachedMap[locale] {
-				entityTrans = append(entityTrans, t)
-			}
+			entityTrans = append(entityTrans, cachedMap[locale]...)
 		}
 		results[id] = entityTrans
 	}
@@ -66,13 +64,10 @@ func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []stri
 		for id, trans := range fresh {
 			results[id] = trans
 
-			// Store in cache grouped by locale then field name
+			// Store in cache grouped by locale
 			grouped := make(map[string]domain.Translations)
 			for _, t := range trans {
-				if grouped[t.Locale] == nil {
-					grouped[t.Locale] = make(domain.Translations)
-				}
-				grouped[t.Locale][t.FieldName] = t
+				grouped[t.Locale] = append(grouped[t.Locale], t)
 			}
 			_ = c.driver.Set(ctx, id, grouped, c.ttl)
 		}

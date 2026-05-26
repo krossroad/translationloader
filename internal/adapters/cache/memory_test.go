@@ -18,13 +18,12 @@ func TestCachedTranslationLoader_BulkLoad(t *testing.T) {
 	entityIDs := []string{"id-1"}
 	locales := []string{"en", "th"}
 
-	// Expectation: Key is now just the entity ID
 	expectedKey := "id-1"
 
-	expectedTranslationsEN := []domain.Translation{
+	expectedTranslationsEN := domain.Translations{
 		{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"},
 	}
-	expectedTranslationsTH := []domain.Translation{
+	expectedTranslationsTH := domain.Translations{
 		{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"},
 	}
 
@@ -33,19 +32,18 @@ func TestCachedTranslationLoader_BulkLoad(t *testing.T) {
 		mockDriver := mocks.NewCacheDriver(t)
 		cachedLoader := NewCachedTranslationLoader(mockUnderlying, mockDriver, ttl)
 
-		// 1. Try to get from driver — nil map = miss
+		// nil map = miss
 		mockDriver.On("Get", ctx, expectedKey).Return(nil, nil).Once()
 
-		// 2. Fallback to underlying
-		underlyingRes := map[string][]domain.Translation{
+		underlyingRes := map[string]domain.Translations{
 			"id-1": append(expectedTranslationsEN, expectedTranslationsTH...),
 		}
 		mockUnderlying.On("BulkLoad", ctx, entityIDs, locales).Return(underlyingRes, nil).Once()
 
-		// 3. Store in driver as locale → Translations (fieldName → Translation)
+		// Stored in cache grouped by locale
 		expectedCacheMap := map[string]domain.Translations{
-			"en": {"name": {EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
-			"th": {"name": {EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"}},
+			"en": {{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
+			"th": {{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"}},
 		}
 		mockDriver.On("Set", ctx, expectedKey, expectedCacheMap, ttl).Return(nil).Once()
 
@@ -62,22 +60,21 @@ func TestCachedTranslationLoader_BulkLoad(t *testing.T) {
 		cachedLoader := NewCachedTranslationLoader(mockUnderlying, mockDriver, ttl)
 
 		cachedMap := map[string]domain.Translations{
-			"en": {"name": {EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
-			"th": {"name": {EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"}},
+			"en": {{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
+			"th": {{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"}},
 		}
 
-		// 1. Get from driver — non-nil map = hit
+		// non-nil map = hit
 		mockDriver.On("Get", ctx, expectedKey).Return(cachedMap, nil).Once()
 
 		res, err := cachedLoader.BulkLoad(ctx, entityIDs, locales)
 		assert.NoError(t, err)
 
-		expectedRes := map[string][]domain.Translation{
+		expectedRes := map[string]domain.Translations{
 			"id-1": append(expectedTranslationsEN, expectedTranslationsTH...),
 		}
 		assert.Equal(t, expectedRes, res)
 
-		// Underlying should NOT be called
 		mockUnderlying.AssertNotCalled(t, "BulkLoad", mock.Anything, mock.Anything, mock.Anything)
 	})
 
@@ -88,22 +85,19 @@ func TestCachedTranslationLoader_BulkLoad(t *testing.T) {
 
 		// Cache only has "en"
 		cachedMap := map[string]domain.Translations{
-			"en": {"name": {EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
+			"en": {{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
 		}
 
-		// 1. Get from driver (hit, but "th" is missing)
 		mockDriver.On("Get", ctx, expectedKey).Return(cachedMap, nil).Once()
 
-		// 2. Fallback to underlying for ALL requested locales (as per spec, it overwrites)
-		underlyingRes := map[string][]domain.Translation{
+		underlyingRes := map[string]domain.Translations{
 			"id-1": append(expectedTranslationsEN, expectedTranslationsTH...),
 		}
 		mockUnderlying.On("BulkLoad", ctx, entityIDs, locales).Return(underlyingRes, nil).Once()
 
-		// 3. Store the full updated map in driver
 		expectedCacheMap := map[string]domain.Translations{
-			"en": {"name": {EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
-			"th": {"name": {EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"}},
+			"en": {{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
+			"th": {{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"}},
 		}
 		mockDriver.On("Set", ctx, expectedKey, expectedCacheMap, ttl).Return(nil).Once()
 
@@ -125,10 +119,10 @@ func TestCachedTranslationLoader_Invalidate_O1(t *testing.T) {
 	ctx := context.Background()
 	entityID := "PROD-1"
 
-	// Test Invalidate: Should call Delete for the entityID EXACTLY ONCE
 	mockDriver.On("Delete", ctx, entityID).Return(nil).Once()
 
-	cachedLoader.Invalidate(entityID)
+	err := cachedLoader.Invalidate(entityID)
+	assert.NoError(t, err)
 
 	mockDriver.AssertExpectations(t)
 }

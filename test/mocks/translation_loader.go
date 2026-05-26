@@ -15,23 +15,23 @@ type TranslationLoader struct {
 }
 
 // BulkLoad provides a mock function with given fields: ctx, entityIDs, locales
-func (_m *TranslationLoader) BulkLoad(ctx context.Context, entityIDs []string, locales []string) (map[string][]domain.Translation, error) {
+func (_m *TranslationLoader) BulkLoad(ctx context.Context, entityIDs []string, locales []string) (map[string]domain.Translations, error) {
 	ret := _m.Called(ctx, entityIDs, locales)
 
 	if len(ret) == 0 {
 		panic("no return value specified for BulkLoad")
 	}
 
-	var r0 map[string][]domain.Translation
+	var r0 map[string]domain.Translations
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, []string, []string) (map[string][]domain.Translation, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, []string, []string) (map[string]domain.Translations, error)); ok {
 		return rf(ctx, entityIDs, locales)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, []string, []string) map[string][]domain.Translation); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, []string, []string) map[string]domain.Translations); ok {
 		r0 = rf(ctx, entityIDs, locales)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[string][]domain.Translation)
+			r0 = ret.Get(0).(map[string]domain.Translations)
 		}
 	}
 

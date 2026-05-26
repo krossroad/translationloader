@@ -21,9 +21,9 @@ func NewPostgresTranslationLoader(db DB) *PostgresTranslationLoader {
 	return &PostgresTranslationLoader{db: db}
 }
 
-func (l *PostgresTranslationLoader) BulkLoad(ctx context.Context, entityIDs []string, locales []string) (map[string][]domain.Translation, error) {
+func (l *PostgresTranslationLoader) BulkLoad(ctx context.Context, entityIDs []string, locales []string) (map[string]domain.Translations, error) {
 	if len(entityIDs) == 0 {
-		return make(map[string][]domain.Translation), nil
+		return make(map[string]domain.Translations), nil
 	}
 
 	query := `
@@ -44,7 +44,7 @@ func (l *PostgresTranslationLoader) BulkLoad(ctx context.Context, entityIDs []st
 	}
 	defer rows.Close()
 
-	results := make(map[string][]domain.Translation)
+	results := make(map[string]domain.Translations)
 	for rows.Next() {
 		var t dbTranslation
 		err := rows.Scan(&t.ID, &t.EntityType, &t.EntityID, &t.Locale, &t.FieldName, &t.FieldValue, &t.UpdatedAt)

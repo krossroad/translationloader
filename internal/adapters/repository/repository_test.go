@@ -141,7 +141,7 @@ func TestPostgresTranslationLoader(t *testing.T) {
 	t.Run("BulkLoad", func(t *testing.T) {
 		rows := mock.NewRows([]string{"id", "entity_type", "entity_id", "locale", "field_name", "field_value", "updated_at"}).
 			AddRow("t1", "product", "p1", "en", "name", "Name EN", time.Now())
-		
+
 		mock.ExpectQuery("SELECT id, entity_type, entity_id, locale, field_name, field_value, updated_at FROM translation WHERE entity_id = ANY\\(\\$1\\) AND locale = ANY\\(\\$2\\)").
 			WithArgs([]string{"p1"}, []string{"en"}).
 			WillReturnRows(rows)

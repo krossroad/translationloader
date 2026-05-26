@@ -21,8 +21,8 @@ func TestOtterDriver(t *testing.T) {
 
 		key := "test-entity-1"
 		value := map[string]domain.Translations{
-			"en": {"label": {EntityID: "test-entity-1", Locale: "en", FieldName: "label", FieldValue: "V1"}},
-			"fr": {"label": {EntityID: "test-entity-1", Locale: "fr", FieldName: "label", FieldValue: "V2"}},
+			"en": {{EntityID: "test-entity-1", Locale: "en", FieldName: "label", FieldValue: "V1"}},
+			"fr": {{EntityID: "test-entity-1", Locale: "fr", FieldName: "label", FieldValue: "V2"}},
 		}
 
 		err = driver.Set(ctx, key, value, ttl)
@@ -40,7 +40,7 @@ func TestOtterDriver(t *testing.T) {
 
 		key := "test-key-delete"
 		value := map[string]domain.Translations{
-			"en": {"label": {EntityID: "E1", Locale: "en", FieldName: "label", FieldValue: "V1"}},
+			"en": {{EntityID: "E1", Locale: "en", FieldName: "label", FieldValue: "V1"}},
 		}
 
 		_ = driver.Set(ctx, key, value, ttl)
@@ -57,7 +57,7 @@ func TestOtterDriver(t *testing.T) {
 		driver, err := NewOtterDriver(smallCapacity, ttl)
 		require.NoError(t, err)
 
-		val := map[string]domain.Translations{"en": {"label": {EntityID: "E1"}}}
+		val := map[string]domain.Translations{"en": {{EntityID: "E1"}}}
 		_ = driver.Set(ctx, "k1", val, ttl)
 		_ = driver.Set(ctx, "k2", val, ttl)
 		_ = driver.Set(ctx, "k3", val, ttl)
