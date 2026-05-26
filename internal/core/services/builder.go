@@ -30,7 +30,7 @@ func (b *DocumentBuilder) BuildProductDocument(ctx context.Context, p domain.Pro
 
 	doc := b.initializeDocument(p, translations)
 	b.populateProductNames(&doc, translations, fetchLocales, p.ID, p.SKU)
-	b.populateAttributes(&doc, attrs, specs, translations)
+	b.populateAttributes(&doc, attrs, specs, translations, fetchLocales)
 
 	return doc, nil
 }
@@ -60,7 +60,7 @@ func (b *DocumentBuilder) prepareLocales(locales []string) []string {
 	return locales
 }
 
-func (b *DocumentBuilder) initializeDocument(p domain.Product, translations map[string][]domain.Translation) domain.ProductDocument {
+func (b *DocumentBuilder) initializeDocument(p domain.Product, translations map[string]domain.Translations) domain.ProductDocument {
 	brandLabelEn := b.getTranslation(translations[p.ID], "brand_label", "en")
 	if brandLabelEn == "" {
 		brandLabelEn = p.Brand
@@ -77,8 +77,8 @@ func (b *DocumentBuilder) initializeDocument(p domain.Product, translations map[
 		Brand: domain.BrandInfo{
 			Code: p.Brand,
 			Label: domain.Label{
-				En: brandLabelEn,
-				Th: brandLabelTh,
+				"en": brandLabelEn,
+				"th": brandLabelTh,
 			},
 		},
 		ProductName: make([]domain.ProductName, 0),
@@ -86,7 +86,7 @@ func (b *DocumentBuilder) initializeDocument(p domain.Product, translations map[
 	}
 }
 
-func (b *DocumentBuilder) populateProductNames(doc *domain.ProductDocument, translations map[string][]domain.Translation, locales []string, productID string, sku string) {
+func (b *DocumentBuilder) populateProductNames(doc *domain.ProductDocument, translations map[string]domain.Translations, locales []string, productID string, sku string) {
 	for _, l := range locales {
 		name := b.getTranslation(translations[productID], "productname", l)
 		if name == "" {
@@ -96,7 +96,7 @@ func (b *DocumentBuilder) populateProductNames(doc *domain.ProductDocument, tran
 	}
 }
 
-func (b *DocumentBuilder) populateAttributes(doc *domain.ProductDocument, attrs []domain.Attribute, specs []domain.ProductSpecification, translations map[string][]domain.Translation) {
+func (b *DocumentBuilder) populateAttributes(doc *domain.ProductDocument, attrs []domain.Attribute, specs []domain.ProductSpecification, translations map[string]domain.Translations, locales []string) {
 	attrMap := make(map[string]domain.Attribute)
 	for _, a := range attrs {
 		attrMap[a.ID] = a
@@ -117,29 +117,33 @@ func (b *DocumentBuilder) populateAttributes(doc *domain.ProductDocument, attrs 
 
 		// Special handling for oil_grade as requested in the doc shape
 		if attr.Code == "oil_grade" {
-			doc.OilGrade = b.mapOilGrade(s, translations[s.ID])
+			doc.OilGrade = b.mapOilGrade(s, translations[s.ID], locales)
 		}
 	}
 }
 
-func (b *DocumentBuilder) mapOilGrade(spec domain.ProductSpecification, translations []domain.Translation) domain.Property {
+func (b *DocumentBuilder) mapOilGrade(spec domain.ProductSpecification, translations domain.Translations, locales []string) domain.Property {
 	og := domain.Property{
-		Code: spec.Value,
-		Label: domain.Label{
-			En: b.getTranslation(translations, "value_label", "en"),
-			Th: b.getTranslation(translations, "value_label", "th"),
-		},
+		Code:  spec.Value,
+		Label: make(domain.Label),
 	}
-	if og.Label.En == "" {
-		og.Label.En = spec.Value
+	for _, locale := range locales {
+		val := b.getTranslation(translations, "value_label", locale)
+		if val == "" {
+			val = b.getTranslation(translations, "value_label", "en")
+		}
+		if val == "" {
+			val = spec.Value
+		}
+		og.Label[locale] = val
 	}
-	if og.Label.Th == "" {
-		og.Label.Th = og.Label.En
+	if og.Label["en"] == "" {
+		og.Label["en"] = spec.Value
 	}
 	return og
 }
 
-func (b *DocumentBuilder) getTranslation(list []domain.Translation, field string, locale string) string {
+func (b *DocumentBuilder) getTranslation(list domain.Translations, field string, locale string) string {
 	// 1. Look for exact locale and field
 	for _, t := range list {
 		if t.FieldName == field && t.Locale == locale {
