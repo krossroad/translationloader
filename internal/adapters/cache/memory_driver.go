@@ -10,7 +10,7 @@ import (
 )
 
 type memoryItem struct {
-	value     map[string][]domain.Translation
+	value     map[string]domain.Translations
 	expiresAt time.Time
 }
 
@@ -25,23 +25,23 @@ func NewMemoryDriver() ports.CacheDriver {
 	}
 }
 
-func (d *memoryDriver) Get(ctx context.Context, key string) (map[string][]domain.Translation, bool, error) {
+func (d *memoryDriver) Get(ctx context.Context, key string) (map[string]domain.Translations, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
 	item, ok := d.items[key]
 	if !ok {
-		return nil, false, nil
+		return nil, nil
 	}
 
 	if !item.expiresAt.IsZero() && time.Now().After(item.expiresAt) {
-		return nil, false, nil
+		return nil, nil
 	}
 
-	return item.value, true, nil
+	return item.value, nil
 }
 
-func (d *memoryDriver) Set(ctx context.Context, key string, value map[string][]domain.Translation, ttl time.Duration) error {
+func (d *memoryDriver) Set(ctx context.Context, key string, value map[string]domain.Translations, ttl time.Duration) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 

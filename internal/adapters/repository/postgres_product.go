@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/rikeshs/translationloader/internal/core/domain"
 )
 
@@ -19,6 +21,9 @@ func (r *PostgresProductRepository) GetProduct(ctx context.Context, id string) (
 	var p dbProduct
 	err := r.db.QueryRow(ctx, "SELECT id, sku, part_number, brand, category_id FROM product WHERE id = $1", id).Scan(&p.ID, &p.SKU, &p.PartNumber, &p.Brand, &p.CategoryID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Product{}, fmt.Errorf("product %s: %w: %w", id, domain.ErrNotFound, err)
+		}
 		return domain.Product{}, fmt.Errorf("failed to query product: %w", err)
 	}
 	return p.toDomain(), nil

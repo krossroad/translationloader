@@ -29,7 +29,7 @@ type SyncApplication struct {
 func NewSyncApplication(ctx context.Context, cfg AppConfig) (*SyncApplication, error) {
 	app := &SyncApplication{}
 
-	if err := app.initPool(ctx, cfg.DBDSN); err != nil {
+	if err := app.initDB(ctx, cfg.DBDSN); err != nil {
 		return nil, err
 	}
 
@@ -45,7 +45,7 @@ func NewSyncApplication(ctx context.Context, cfg AppConfig) (*SyncApplication, e
 	return app, nil
 }
 
-func (a *SyncApplication) initPool(ctx context.Context, dsn string) error {
+func (a *SyncApplication) initDB(ctx context.Context, dsn string) error {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		return fmt.Errorf("could not connect to database: %w", err)

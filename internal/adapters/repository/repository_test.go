@@ -3,9 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v3"
 	"github.com/rikeshs/translationloader/internal/core/domain"
 	"github.com/stretchr/testify/assert"
@@ -102,6 +104,29 @@ func TestPostgresProductRepository(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, specs, 1)
 		assert.Equal(t, "v1", specs[0].Value)
+	})
+}
+
+func TestPostgresProductRepository_GetProduct_NotFound(t *testing.T) {
+	// Bug 3: GetProduct wraps pgx.ErrNoRows with fmt.Errorf, so callers cannot use
+	// errors.Is to distinguish "not found" from a transient DB error. The fix requires
+	// domain.ErrNotFound to be defined and returned (wrapped) when pgx.ErrNoRows occurs.
+	mock, err := pgxmock.NewPool()
+	assert.NoError(t, err)
+	defer mock.Close()
+
+	repo := NewPostgresProductRepository(mock)
+	ctx := context.Background()
+
+	t.Run("GetProduct returns ErrNotFound when row missing", func(t *testing.T) {
+		mock.ExpectQuery("SELECT id, sku, part_number, brand, category_id FROM product WHERE id = \\$1").
+			WithArgs("missing-id").
+			WillReturnError(pgx.ErrNoRows)
+
+		_, err := repo.GetProduct(ctx, "missing-id")
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, domain.ErrNotFound),
+			"expected errors.Is(err, domain.ErrNotFound) to be true, got: %v", err)
 	})
 }
 

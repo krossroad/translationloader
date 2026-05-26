@@ -27,8 +27,8 @@ func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []stri
 	var missingIDs []string
 
 	for _, id := range entityIDs {
-		cachedMap, found, err := c.driver.Get(ctx, id)
-		if err != nil || !found {
+		cachedMap, err := c.driver.Get(ctx, id)
+		if err != nil || cachedMap == nil {
 			missingIDs = append(missingIDs, id)
 			continue
 		}
@@ -47,10 +47,12 @@ func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []stri
 			continue
 		}
 
-		// Combine cached translations for the requested locales
+		// Flatten nested map back to []Translation for the BulkLoad result
 		var entityTrans []domain.Translation
 		for _, locale := range locales {
-			entityTrans = append(entityTrans, cachedMap[locale]...)
+			for _, t := range cachedMap[locale] {
+				entityTrans = append(entityTrans, t)
+			}
 		}
 		results[id] = entityTrans
 	}
@@ -64,10 +66,13 @@ func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []stri
 		for id, trans := range fresh {
 			results[id] = trans
 
-			// Store in cache grouped by locale
-			grouped := make(map[string][]domain.Translation)
+			// Store in cache grouped by locale then field name
+			grouped := make(map[string]domain.Translations)
 			for _, t := range trans {
-				grouped[t.Locale] = append(grouped[t.Locale], t)
+				if grouped[t.Locale] == nil {
+					grouped[t.Locale] = make(domain.Translations)
+				}
+				grouped[t.Locale][t.FieldName] = t
 			}
 			_ = c.driver.Set(ctx, id, grouped, c.ttl)
 		}
@@ -76,6 +81,6 @@ func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []stri
 	return results, nil
 }
 
-func (c *CachedTranslationLoader) Invalidate(entityID string) {
-	_ = c.driver.Delete(context.Background(), entityID)
+func (c *CachedTranslationLoader) Invalidate(entityID string) error {
+	return c.driver.Delete(context.Background(), entityID)
 }

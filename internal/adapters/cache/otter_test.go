@@ -14,23 +14,23 @@ func TestOtterDriver(t *testing.T) {
 	ctx := context.Background()
 	ttl := 1 * time.Minute
 	capacity := 10
-	
+
 	t.Run("Set and Get Map Value", func(t *testing.T) {
 		driver, err := NewOtterDriver(capacity, ttl)
 		require.NoError(t, err)
 
 		key := "test-entity-1"
-		value := map[string][]domain.Translation{
-			"en": {{EntityID: "test-entity-1", Locale: "en", FieldValue: "V1"}},
-			"fr": {{EntityID: "test-entity-1", Locale: "fr", FieldValue: "V2"}},
+		value := map[string]domain.Translations{
+			"en": {"label": {EntityID: "test-entity-1", Locale: "en", FieldName: "label", FieldValue: "V1"}},
+			"fr": {"label": {EntityID: "test-entity-1", Locale: "fr", FieldName: "label", FieldValue: "V2"}},
 		}
 
 		err = driver.Set(ctx, key, value, ttl)
 		assert.NoError(t, err)
 
-		got, found, err := driver.Get(ctx, key)
+		got, err := driver.Get(ctx, key)
 		assert.NoError(t, err)
-		assert.True(t, found)
+		assert.NotNil(t, got)
 		assert.Equal(t, value, got)
 	})
 
@@ -39,17 +39,17 @@ func TestOtterDriver(t *testing.T) {
 		require.NoError(t, err)
 
 		key := "test-key-delete"
-		value := map[string][]domain.Translation{
-			"en": {{EntityID: "E1", Locale: "en", FieldValue: "V1"}},
+		value := map[string]domain.Translations{
+			"en": {"label": {EntityID: "E1", Locale: "en", FieldName: "label", FieldValue: "V1"}},
 		}
 
 		_ = driver.Set(ctx, key, value, ttl)
 		err = driver.Delete(ctx, key)
 		assert.NoError(t, err)
 
-		_, found, err := driver.Get(ctx, key)
+		got, err := driver.Get(ctx, key)
 		assert.NoError(t, err)
-		assert.False(t, found)
+		assert.Nil(t, got)
 	})
 
 	t.Run("Eviction", func(t *testing.T) {
@@ -57,7 +57,7 @@ func TestOtterDriver(t *testing.T) {
 		driver, err := NewOtterDriver(smallCapacity, ttl)
 		require.NoError(t, err)
 
-		val := map[string][]domain.Translation{"en": {{EntityID: "E1"}}}
+		val := map[string]domain.Translations{"en": {"label": {EntityID: "E1"}}}
 		_ = driver.Set(ctx, "k1", val, ttl)
 		_ = driver.Set(ctx, "k2", val, ttl)
 		_ = driver.Set(ctx, "k3", val, ttl)
