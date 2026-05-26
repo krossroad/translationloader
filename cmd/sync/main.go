@@ -1,0 +1,77 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/rikeshs/translationloader/internal/adapters/cache"
+	"github.com/rikeshs/translationloader/internal/app"
+)
+
+func main() {
+	flag.Parse()
+	productIDs := flag.Args()
+	if len(productIDs) == 0 {
+		fmt.Println("Usage: sync [product_ids...]")
+		os.Exit(1)
+	}
+
+	cfg := loadConfig()
+
+	ctx := context.Background()
+	syncApp, err := app.NewSyncApplication(ctx, cfg)
+	if err != nil {
+		log.Fatalf("failed to initialize application: %v", err)
+	}
+	defer syncApp.Close()
+
+	docs, err := syncApp.RunSync(ctx, productIDs)
+	if err != nil {
+		log.Fatalf("sync failed: %v", err)
+	}
+
+	for _, doc := range docs {
+		fmt.Printf("Assembled Document for ID: %s\n%+v\n\n", doc.UUID, doc)
+	}
+}
+
+// loadConfig
+func loadConfig() app.AppConfig {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		log.Fatal("DATABASE_URL environment variable is not set")
+	}
+
+	locales := []string{"en", "th"}
+	if envLocales := os.Getenv("SUPPORTED_LOCALES"); envLocales != "" {
+		locales = strings.Split(envLocales, ",")
+	}
+
+	ttlStr := os.Getenv("CACHE_TTL")
+	ttl, _ := time.ParseDuration(ttlStr)
+	if ttl == 0 {
+		ttl = 5 * time.Minute
+	}
+
+	capacityStr := os.Getenv("CACHE_OTTER_CAPACITY")
+	capacity, _ := strconv.Atoi(capacityStr)
+	if capacity == 0 {
+		capacity = 1000
+	}
+
+	return app.AppConfig{
+		DBDSN: dsn,
+		Cache: cache.Config{
+			Driver:   os.Getenv("CACHE_DRIVER"),
+			TTL:      ttl,
+			Capacity: capacity,
+		},
+		Locales: locales,
+	}
+}
