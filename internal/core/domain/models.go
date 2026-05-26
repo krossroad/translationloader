@@ -25,8 +25,8 @@ type Translation struct {
 	UpdatedAt  time.Time
 }
 
-// Translations indexes Translation records by field name.
-type Translations map[string]Translation
+// Translations is a slice of Translation records for a single entity.
+type Translations []Translation
 
 type Product struct {
 	ID         string
@@ -49,10 +49,7 @@ type ProductSpecification struct {
 	Value       string
 }
 
-type Label struct {
-	En string
-	Th string
-}
+type Label map[string]string
 
 type BrandInfo struct {
 	Code  string

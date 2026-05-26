@@ -1,9 +1,6 @@
 package dto
 
-type Label struct {
-	En string `json:"en"`
-	Th string `json:"th"`
-}
+type Label map[string]string
 
 type Brand struct {
 	Code  string `json:"code"`

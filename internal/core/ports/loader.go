@@ -10,7 +10,7 @@ import (
 type TranslationLoader interface {
 	// BulkLoad fetches translations for a batch of entity IDs and specific locales.
 	// Returns a map where key is EntityID and value is a slice of translations for that entity.
-	BulkLoad(ctx context.Context, entityIDs []string, locales []string) (map[string][]domain.Translation, error)
+	BulkLoad(ctx context.Context, entityIDs []string, locales []string) (map[string]domain.Translations, error)
 }
 
 type CacheDriver interface {
