@@ -14,14 +14,13 @@ type TranslationLoader interface {
 }
 
 type CacheDriver interface {
-	// Get retrieves cached translations for an entity keyed by locale then field name.
-	// Returns nil map (not an error) on a cache miss.
-	Get(ctx context.Context, key string) (map[string]domain.Translations, error)
+	// Load returns the cached value for key, or calls loader on a miss and
+	// stores the result. The driver serialises miss→fetch→store under a
+	// per-key lock so a concurrent Delete cannot race with the store.
+	Load(ctx context.Context, key string, ttl time.Duration,
+		loader func(context.Context) (map[string]domain.Translations, error),
+	) (map[string]domain.Translations, error)
 
-	// Set stores translations for an entity with a specific TTL.
-	// The value is a map where the outer key is locale and the inner key is field name.
-	Set(ctx context.Context, key string, value map[string]domain.Translations, ttl time.Duration) error
-
-	// Delete removes all translations for a specific entity.
+	// Delete removes the cached value for key (entity-level, O(1)).
 	Delete(ctx context.Context, key string) error
 }
