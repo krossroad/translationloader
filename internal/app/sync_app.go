@@ -1,3 +1,4 @@
+// Package app provides the application orchestration logic.
 package app
 
 import (
@@ -14,18 +15,21 @@ import (
 	"github.com/rikeshs/translationloader/internal/core/services"
 )
 
-type AppConfig struct {
+// Config holds the configuration for the SyncApplication.
+type Config struct {
 	DBDSN   string
 	Cache   cache.Config
 	Locales []string
 }
 
+// SyncApplication represents the main application service.
 type SyncApplication struct {
 	syncHandler *SyncHandler
 	pgPool      *pgxpool.Pool
 }
 
-func NewSyncApplication(ctx context.Context, cfg AppConfig) (*SyncApplication, error) {
+// NewSyncApplication initializes a new SyncApplication instance with required dependencies.
+func NewSyncApplication(ctx context.Context, cfg Config) (*SyncApplication, error) {
 	pool, err := initDB(ctx, cfg.DBDSN)
 	if err != nil {
 		return nil, err
@@ -67,12 +71,14 @@ func initDB(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
+// Close closes the application resources, such as database pools.
 func (a *SyncApplication) Close() {
 	if a.pgPool != nil {
 		a.pgPool.Close()
 	}
 }
 
+// BuildProductDocument builds a list of Elasticsearch documents for the given product IDs.
 func (a *SyncApplication) BuildProductDocument(ctx context.Context, productIDs []string) ([]dto.ElasticsearchDocument, error) {
 	var results []dto.ElasticsearchDocument
 

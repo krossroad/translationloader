@@ -104,7 +104,7 @@ func TestSyncApplication_BuildProductDocument(t *testing.T) {
 
 func TestNewSyncApplication(t *testing.T) {
 	ctx := context.Background()
-	cfg := AppConfig{
+	cfg := Config{
 		DBDSN: "invalid-dsn",
 		Cache: cache.Config{
 			Driver: "otter",

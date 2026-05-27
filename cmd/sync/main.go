@@ -1,3 +1,4 @@
+// Package main provides the entry point for the sync command.
 package main
 
 import (
@@ -48,8 +49,8 @@ func main() {
 	}
 }
 
-// loadConfig
-func loadConfig() app.AppConfig {
+// loadConfig loads the configuration from environment variables and flags.
+func loadConfig() app.Config {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		log.Fatal("DATABASE_URL environment variable is not set")
@@ -72,7 +73,7 @@ func loadConfig() app.AppConfig {
 		capacity = 1000
 	}
 
-	return app.AppConfig{
+	return app.Config{
 		DBDSN: dsn,
 		Cache: cache.Config{
 			Driver:   os.Getenv("CACHE_DRIVER"),
