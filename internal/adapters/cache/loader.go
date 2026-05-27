@@ -24,16 +24,30 @@ func NewCachedTranslationLoader(underlying ports.TranslationLoader, driver ports
 
 func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []string, locales []string) (map[string]domain.Translations, error) {
 	results := make(map[string]domain.Translations)
-	var missingIDs []string
 
 	for _, id := range entityIDs {
-		cachedMap, err := c.driver.Get(ctx, id)
-		if err != nil || cachedMap == nil {
-			missingIDs = append(missingIDs, id)
+		entityID := id // capture for closure
+
+		cachedMap, err := c.driver.Load(ctx, entityID, c.ttl, func(lctx context.Context) (map[string]domain.Translations, error) {
+			fresh, err := c.underlying.BulkLoad(lctx, []string{entityID}, locales)
+			if err != nil {
+				return nil, err
+			}
+			trans := fresh[entityID]
+			grouped := make(map[string]domain.Translations)
+			for _, t := range trans {
+				grouped[t.Locale] = append(grouped[t.Locale], t)
+			}
+			return grouped, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if cachedMap == nil {
 			continue
 		}
 
-		// Verify all locales are present
+		// Verify all requested locales are present; if any are missing, evict and reload.
 		allPresent := true
 		for _, locale := range locales {
 			if _, ok := cachedMap[locale]; !ok {
@@ -41,36 +55,33 @@ func (c *CachedTranslationLoader) BulkLoad(ctx context.Context, entityIDs []stri
 				break
 			}
 		}
-
 		if !allPresent {
-			missingIDs = append(missingIDs, id)
-			continue
+			if err := c.driver.Delete(ctx, entityID); err != nil {
+				return nil, err
+			}
+			cachedMap, err = c.driver.Load(ctx, entityID, c.ttl, func(lctx context.Context) (map[string]domain.Translations, error) {
+				fresh, err := c.underlying.BulkLoad(lctx, []string{entityID}, locales)
+				if err != nil {
+					return nil, err
+				}
+				trans := fresh[entityID]
+				grouped := make(map[string]domain.Translations)
+				for _, t := range trans {
+					grouped[t.Locale] = append(grouped[t.Locale], t)
+				}
+				return grouped, nil
+			})
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		// Flatten locale buckets into a single Translations slice for the BulkLoad result
+		// Flatten locale buckets into a single Translations slice.
 		var entityTrans domain.Translations
 		for _, locale := range locales {
 			entityTrans = append(entityTrans, cachedMap[locale]...)
 		}
-		results[id] = entityTrans
-	}
-
-	if len(missingIDs) > 0 {
-		fresh, err := c.underlying.BulkLoad(ctx, missingIDs, locales)
-		if err != nil {
-			return nil, err
-		}
-
-		for id, trans := range fresh {
-			results[id] = trans
-
-			// Store in cache grouped by locale
-			grouped := make(map[string]domain.Translations)
-			for _, t := range trans {
-				grouped[t.Locale] = append(grouped[t.Locale], t)
-			}
-			_ = c.driver.Set(ctx, id, grouped, c.ttl)
-		}
+		results[entityID] = entityTrans
 	}
 
 	return results, nil
