@@ -66,6 +66,10 @@ docker-up: ## Start local infrastructure (Postgres)
 docker-down: ## Stop local infrastructure
 	docker compose down
 
+load-fixtures: ## Load data fixtures into the local database
+	@echo "Loading fixtures..."
+	cat fixtures/data.sql | docker compose exec -T postgres psql -U postgres -d translation_loader
+
 migrate-up: ## Run migrations up
 	migrate -path migrations -database "$(DATABASE_URL)" up
 
