@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/rikeshs/translationloader/internal/core/domain"
-	"github.com/rikeshs/translationloader/test/mocks"
+	"github.com/rikeshs/translationloader/tests/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

@@ -6,7 +6,7 @@ import (
 
 	"github.com/rikeshs/translationloader/internal/adapters/cache"
 	"github.com/rikeshs/translationloader/internal/core/domain"
-	"github.com/rikeshs/translationloader/test/mocks"
+	"github.com/rikeshs/translationloader/tests/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -107,7 +107,7 @@ func TestNewSyncApplication(t *testing.T) {
 	cfg := AppConfig{
 		DBDSN: "invalid-dsn",
 		Cache: cache.Config{
-			Driver: "memory",
+			Driver: "otter",
 		},
 	}
 
