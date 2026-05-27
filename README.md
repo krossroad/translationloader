@@ -87,6 +87,10 @@ flowchart TB
 
 ```
 
+### Otter Caching Library
+
+Otter was selected as the cache driver due to its superior performance characteristics under high concurrency. Unlike standard `sync.Map` or mutex-protected caches, Otter leverages a lock-free design and cache-friendly data structures to minimize contention. Its high-throughput and low-latency profile make it uniquely suited for the translation-loading hot path, ensuring that translation lookups do not become a bottleneck during peak load.
+
 ### Single Bulk Translation Round-Trip
 
 `DocumentBuilder.BuildProductDocument` collects all entity IDs it will need (product, attributes, specifications) before making any query, then calls `TranslationLoader.BulkLoad` once with the full set. There is no N+1 — translations for an entire product document are fetched in a single `SELECT ... WHERE entity_id = ANY($1) AND locale = ANY($2)`.
