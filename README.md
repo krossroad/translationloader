@@ -95,19 +95,29 @@ flowchart TB
 
 `SyncHandler.SyncProduct` fetches the product, its attributes, and its specifications in parallel using `errgroup`. All three Postgres queries run concurrently; the handler waits for all three before passing data to `DocumentBuilder`. This keeps per-sync latency proportional to the slowest single query rather than their sum.
 
-### Entity-Centric Cache with Singleflight Guard
+```mermaid
+      sequenceDiagram
+      participant SH as SyncHandler
+      participant PR as ProductRepository
+      participant DB as DocumentBuilder
 
-Translations are cached by entity ID. The `CacheDriver` interface exposes a `Load(key, ttl, loaderFunc)` pattern — the adapter (Otter) serialises cache-miss fetches under a per-key `singleflight.Group`, so concurrent requests for the same entity trigger exactly one DB round-trip.
+      SH->>SH: errgroup.WithContext(ctx)
 
-A generation counter (`delGen`) in the Otter driver prevents a race where a `Delete` fires between a loader returning and the value being written to cache. If the generation has advanced, the stale value is discarded. This is exercised explicitly in `TestOtterDriver_NoStaleWriteAfterDelete`.
+      par goroutine 1
+            SH->>PR: GetProduct(id)
+            PR-->>SH: product
+      and goroutine 2
+            SH->>PR: GetAttributesByProductID(id)
+            PR-->>SH: attrs
+      and goroutine 3
+            SH->>PR: GetSpecificationsByProductID(id)
+            PR-->>SH: specs
+      end
 
-### Partial Locale-Hit Eviction
-
-The `CachedTranslationLoader` checks that every requested locale is present in a cached entry. If a locale is missing (e.g. a new locale was added after the entry was cached), the entry is evicted and a fresh full load is performed. This keeps the cache locale-complete without requiring a TTL flush.
-
-### English as Mandatory Fallback
-
-`DocumentBuilder.prepareLocales` always injects `"en"` into the locale list before calling `BulkLoad`, even if the caller did not request it. English is used as the fallback for every field when a requested locale has no translation. This guarantees no field is ever empty in the assembled document.
+      SH->>SH: g.Wait()
+      SH->>DB: BuildProductDocument(product, attrs, specs, locales)
+      DB-->>SH: ProductDocument
+```
 
 ### Graceful Missing-Translation Fallbacks
 
@@ -121,38 +131,11 @@ Errors are reserved for infrastructure failures (DB unreachable, scan failure), 
 ---
 
 ## What I Would Change Given More Time
+-  **Fix Per-Entity DB Queries on Cache Miss**:The most significant correctness gap: `CachedTranslationLoader.BulkLoad` loops over entity IDs and calls `underlying.BulkLoad` with a single entity ID per iteration on a cache miss. Ten uncached entities produce ten separate DB queries. The fix is to collect all cache-miss IDs first, issue one `BulkLoad` for the entire miss set, then populate the cache per entity from the single result. This preserves the bulk contract the port promises.
 
-### Fix Per-Entity DB Queries on Cache Miss
+- **Consistent Locale Handling**: Here `oil_grade` gets full locale-aware treatment. All attributes should use the same locale-aware lookup with English fallback for consistency.
 
-The most significant correctness gap: `CachedTranslationLoader.BulkLoad` loops over entity IDs and calls `underlying.BulkLoad` with a single entity ID per iteration on a cache miss. Ten uncached entities produce ten separate DB queries. The fix is to collect all cache-miss IDs first, issue one `BulkLoad` for the entire miss set, then populate the cache per entity from the single result. This preserves the bulk contract the port promises.
-
-### Add `Invalidate` to the Port Interface
-
-`CachedTranslationLoader.Invalidate` is a method on the concrete type only, not on the `TranslationLoader` interface. Callers must hold the concrete type to call it, which leaks the adapter into application code. The cleaner shape is a dedicated `TranslationInvalidator` interface (or a method on `CacheDriver`) so the app layer depends only on abstractions.
-
-### Fix the Double-Wrap Error in `GetProduct`
-
-`fmt.Errorf("product %s: %w: %w", id, domain.ErrNotFound, err)` wraps two sentinel errors simultaneously. This makes both `errors.Is(err, domain.ErrNotFound)` and `errors.Is(err, pgx.ErrNoRows)` true, which could cause unintended matches in calling code. The intent should be expressed as a single sentinel with the original error as the cause.
-
-### Make `Invalidate` Accept a Context
-
-`CachedTranslationLoader.Invalidate` calls `context.Background()` internally instead of accepting a `ctx` parameter. This makes it impossible for callers to propagate cancellation or deadlines through invalidation, and makes the method harder to test.
-
-### Consistent Locale Handling in `populateAttributes`
-
-`populateAttributes` fetches spec value labels using hardcoded `"en"` — `getTranslation(translations[s.ID], "value_label", "en")` — while `oil_grade` gets full locale-aware treatment. All attributes should use the same locale-aware lookup with English fallback for consistency.
-
-### Extract the Duplicated Loader Closure
-
-The loader closure in `CachedTranslationLoader.BulkLoad` (lines 31–43) is copy-pasted verbatim for the partial-hit reload path (lines 62–74). This should be a named helper function.
-
-### Remove or Fix the Non-Compiling Test
-
-`TestDocumentBuilder_ThirdLocale_InLabel` contains a comment stating it "fails to compile" and is left in the codebase. A failing test in a submission is misleading. It should either be fixed or removed and tracked as a known gap.
-
-### Observability
-
-Add structured logging (zerolog or slog) at the top layer, and expose Prometheus metrics for cache hit/miss ratio, BulkLoad latency, and sync duration per product. These are the first signals needed to operate the service in production.
+-  **Observability**: Add structured logging (zerolog or slog) at the top layer, and expose Prometheus metrics for cache hit/miss ratio, BulkLoad latency, and sync duration per product. These are the first signals needed to operate the service in production.
 
 ---
 
