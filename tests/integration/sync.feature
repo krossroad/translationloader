@@ -48,3 +48,34 @@ Feature: Product Synchronization
   Scenario: Handle non-existent product gracefully
     When I build the document for product "00000000-0000-0000-0000-999999999999" with locales "en"
     Then the document build should fail
+
+  Scenario: Second sync for the same product uses the translation cache
+    Given a product exists with SKU "BP-CACHE-HIT" and the following translations:
+      | locale | field_name  | field_value       |
+      | en     | productname | Cache Hit Product |
+      | th     | productname | สินค้าแคช         |
+    When I sync the product with locales "en,th"
+    Then the document should contain the English product name "Cache Hit Product"
+    When all translations for the product are deleted from the database
+    And I sync the product again with locales "en,th"
+    Then the document should contain the English product name "Cache Hit Product"
+
+  Scenario: Partial cache hit for a new locale forces a fresh database fetch
+    Given a product exists with SKU "BP-PARTIAL" and the following translations:
+      | locale | field_name  | field_value |
+      | en     | productname | Partial EN  |
+    When I sync the product with locales "en"
+    Then the document should contain the English product name "Partial EN"
+    Given a Thai translation is added for the product:
+      | locale | field_name  | field_value |
+      | th     | productname | บางส่วน TH  |
+    When I sync the product with locales "en,th"
+    Then the document should contain the English product name "Partial EN"
+    And the document should contain the Thai product name "บางส่วน TH"
+
+  Scenario: Product with no translations uses SKU and raw spec values as fallback
+    Given a product exists with SKU "BP-NOTRANS" and no translations
+    When I sync the product with locales "en,th"
+    Then the document SKU should be "BP-NOTRANS"
+    And the document should contain the English product name "BP-NOTRANS"
+    And the document should contain the Thai product name "BP-NOTRANS"

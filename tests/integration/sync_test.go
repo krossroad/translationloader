@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rikeshs/translationloader/internal/adapters/cache"
 	"github.com/rikeshs/translationloader/internal/adapters/repository"
@@ -20,12 +21,13 @@ import (
 )
 
 type testContext struct {
-	db           *pgxpool.Pool
-	pgContainer  *postgres.PostgresContainer
-	loader       *cache.CachedTranslationLoader
-	handler      *app.SyncHandler
-	lastDocument domain.ProductDocument
-	lastError    error
+	db               *pgxpool.Pool
+	pgContainer      *postgres.PostgresContainer
+	loader           *cache.CachedTranslationLoader
+	handler          *app.SyncHandler
+	lastDocument     domain.ProductDocument
+	lastError        error
+	currentProductID string
 }
 
 func (c *testContext) aCleanPostgreSQLDatabaseWithTheProductSchema(ctx context.Context) error {
@@ -150,8 +152,8 @@ func (c *testContext) theDocumentShouldContainTheThaiProductName(name string) er
 }
 
 func (c *testContext) theDocumentsOil_gradeEnglishLabelShouldBe(label string) error {
-	if c.lastDocument.OilGrade.Label.En != label {
-		return fmt.Errorf("expected oil_grade EN label %s, got %s", label, c.lastDocument.OilGrade.Label.En)
+	if c.lastDocument.OilGrade.Label["en"] != label {
+		return fmt.Errorf("expected oil_grade EN label %s, got %s", label, c.lastDocument.OilGrade.Label["en"])
 	}
 	return nil
 }
@@ -163,7 +165,87 @@ func (c *testContext) theTranslationForProductLocaleFieldIsUpdatedToInTheDatabas
 }
 
 func (c *testContext) iInvalidateTheCacheForEntity(id string) error {
-	c.loader.Invalidate(id)
+	return c.loader.Invalidate(id)
+}
+
+// aProductExistsWithSKUAndTheFollowingTranslations seeds a new product with generated UUID and inserts
+// translation rows whose entity_id matches that product. Stores the UUID in currentProductID.
+func (c *testContext) aProductExistsWithSKUAndTheFollowingTranslations(ctx context.Context, sku string, table *godog.Table) error {
+	productID := uuid.New().String()
+	c.currentProductID = productID
+
+	_, err := c.db.Exec(ctx, "INSERT INTO product (id, sku, part_number, brand) VALUES ($1, $2, $3, $4)",
+		productID, sku, "", "")
+	if err != nil {
+		return fmt.Errorf("insert product: %w", err)
+	}
+
+	// Table columns: locale | field_name | field_value
+	for i := 1; i < len(table.Rows); i++ {
+		row := table.Rows[i]
+		locale := row.Cells[0].Value
+		fieldName := row.Cells[1].Value
+		fieldValue := row.Cells[2].Value
+		_, err := c.db.Exec(ctx,
+			"INSERT INTO translation (entity_type, entity_id, locale, field_name, field_value) VALUES ($1, $2, $3, $4, $5)",
+			"product", productID, locale, fieldName, fieldValue)
+		if err != nil {
+			return fmt.Errorf("insert translation: %w", err)
+		}
+	}
+	return nil
+}
+
+// aProductExistsWithSKUAndNoTranslations seeds a product without any translation rows.
+func (c *testContext) aProductExistsWithSKUAndNoTranslations(ctx context.Context, sku string) error {
+	productID := uuid.New().String()
+	c.currentProductID = productID
+
+	_, err := c.db.Exec(ctx, "INSERT INTO product (id, sku, part_number, brand) VALUES ($1, $2, $3, $4)",
+		productID, sku, "", "")
+	if err != nil {
+		return fmt.Errorf("insert product: %w", err)
+	}
+	return nil
+}
+
+// iSyncTheProductWithLocales calls SyncProduct for currentProductID using the persistent loader
+// (preserving cache state) and stores the result.
+func (c *testContext) iSyncTheProductWithLocales(ctx context.Context, localesStr string) error {
+	locales := strings.Split(localesStr, ",")
+
+	productRepo := repository.NewPostgresProductRepository(c.db)
+	docBuilder := services.NewDocumentBuilder(c.loader)
+	handler := app.NewSyncHandler(productRepo, docBuilder, locales)
+
+	doc, err := handler.SyncProduct(ctx, c.currentProductID)
+	c.lastError = err
+	c.lastDocument = doc
+	return nil
+}
+
+// whenAllTranslationsForTheProductAreDeletedFromTheDatabase removes all translation rows
+// for currentProductID directly from the DB without touching the cache.
+func (c *testContext) whenAllTranslationsForTheProductAreDeletedFromTheDatabase(ctx context.Context) error {
+	_, err := c.db.Exec(ctx, "DELETE FROM translation WHERE entity_id = $1", c.currentProductID)
+	return err
+}
+
+// aThaiTranslationIsAddedForTheProduct inserts new translation rows for currentProductID.
+func (c *testContext) aThaiTranslationIsAddedForTheProduct(ctx context.Context, table *godog.Table) error {
+	// Table columns: locale | field_name | field_value
+	for i := 1; i < len(table.Rows); i++ {
+		row := table.Rows[i]
+		locale := row.Cells[0].Value
+		fieldName := row.Cells[1].Value
+		fieldValue := row.Cells[2].Value
+		_, err := c.db.Exec(ctx,
+			"INSERT INTO translation (entity_type, entity_id, locale, field_name, field_value) VALUES ($1, $2, $3, $4, $5)",
+			"product", c.currentProductID, locale, fieldName, fieldValue)
+		if err != nil {
+			return fmt.Errorf("insert Thai translation: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -181,4 +263,10 @@ func InitializeScenario(ctx *godog.ScenarioContext, tctx *testContext) {
 	ctx.Step(`^the document\'s oil_grade English label should be "([^"]*)"$`, tctx.theDocumentsOil_gradeEnglishLabelShouldBe)
 	ctx.Step(`^the translation for product "([^"]*)" \(locale "([^"]*)", field "([^"]*)"\) is updated to "([^"]*)" in the database$`, tctx.theTranslationForProductLocaleFieldIsUpdatedToInTheDatabase)
 	ctx.Step(`^I invalidate the cache for entity "([^"]*)"$`, tctx.iInvalidateTheCacheForEntity)
+	ctx.Step(`^a product exists with SKU "([^"]*)" and the following translations:$`, tctx.aProductExistsWithSKUAndTheFollowingTranslations)
+	ctx.Step(`^a product exists with SKU "([^"]*)" and no translations$`, tctx.aProductExistsWithSKUAndNoTranslations)
+	ctx.Step(`^I sync the product with locales "([^"]*)"$`, tctx.iSyncTheProductWithLocales)
+	ctx.Step(`^I sync the product again with locales "([^"]*)"$`, tctx.iSyncTheProductWithLocales)
+	ctx.Step(`^all translations for the product are deleted from the database$`, tctx.whenAllTranslationsForTheProductAreDeletedFromTheDatabase)
+	ctx.Step(`^a Thai translation is added for the product:$`, tctx.aThaiTranslationIsAddedForTheProduct)
 }

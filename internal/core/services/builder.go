@@ -28,7 +28,7 @@ func (b *DocumentBuilder) BuildProductDocument(ctx context.Context, p domain.Pro
 		return domain.ProductDocument{}, fmt.Errorf("bulk loading translations: %w", err)
 	}
 
-	doc := b.initializeDocument(p, translations)
+	doc := b.initializeDocument(p, translations, fetchLocales)
 	b.populateProductNames(&doc, translations, fetchLocales, p.ID, p.SKU)
 	b.populateAttributes(&doc, attrs, specs, translations, fetchLocales)
 
@@ -60,14 +60,16 @@ func (b *DocumentBuilder) prepareLocales(locales []string) []string {
 	return locales
 }
 
-func (b *DocumentBuilder) initializeDocument(p domain.Product, translations map[string]domain.Translations) domain.ProductDocument {
-	brandLabelEn := b.getTranslation(translations[p.ID], "brand_label", "en")
-	if brandLabelEn == "" {
-		brandLabelEn = p.Brand
-	}
-	brandLabelTh := b.getTranslation(translations[p.ID], "brand_label", "th")
-	if brandLabelTh == "" {
-		brandLabelTh = brandLabelEn
+func (b *DocumentBuilder) initializeDocument(p domain.Product, translations map[string]domain.Translations, fetchLocales []string) domain.ProductDocument {
+	productTrans := translations[p.ID]
+
+	brandLabel := make(domain.Label, len(fetchLocales))
+	for _, locale := range fetchLocales {
+		val := b.getTranslation(productTrans, "brand_label", locale)
+		if val == "" {
+			val = p.Brand
+		}
+		brandLabel[locale] = val
 	}
 
 	return domain.ProductDocument{
@@ -75,11 +77,8 @@ func (b *DocumentBuilder) initializeDocument(p domain.Product, translations map[
 		SKU:        p.SKU,
 		PartNumber: p.PartNumber,
 		Brand: domain.BrandInfo{
-			Code: p.Brand,
-			Label: domain.Label{
-				"en": brandLabelEn,
-				"th": brandLabelTh,
-			},
+			Code:  p.Brand,
+			Label: brandLabel,
 		},
 		ProductName: make([]domain.ProductName, 0),
 		Attributes:  make(map[string]string),

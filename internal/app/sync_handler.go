@@ -17,12 +17,10 @@ type SyncHandler struct {
 }
 
 func NewSyncHandler(productRepo ports.ProductRepository, docBuilder ports.DocumentBuilder, locales []string) *SyncHandler {
-	l := locales
-	// sort.Slice(l)
 	return &SyncHandler{
 		productRepo: productRepo,
 		docBuilder:  docBuilder,
-		locales:     l,
+		locales:     locales,
 	}
 }
 
