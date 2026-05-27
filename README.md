@@ -182,8 +182,6 @@ A cursor-based full-reload sweep (`WHERE updated_at > last_run`) still runs as a
 
 > What SQL or query strategy would you use, and what is the main trade-off?
 
-On the hot path there is **no new query**: the queue delivers the exact set of entity IDs that changed, so the handler issues the existing `BulkLoad` targeted at those IDs only — already selective by design. This keeps database load proportional to the number of changed entities, not the total size of the translations table.
-
-The reconciliation sweep is the only place a timestamp predicate is needed. It adds a single filter — `AND updated_at > $cursor` — to the existing translation query, with the cursor advancing to `MAX(updated_at)` at the end of each successful run. A composite index on `(entity_id, updated_at)` satisfies both the existing `entity_id` filter and the new timestamp bound in one index scan, avoiding a full table scan as the dataset grows.
-
-**Trade-off:** the cursor relies on clock monotonicity at the database layer. A replica that drifts slightly behind the committed cursor, or two writes landing within the same timestamp tick, can cause rows to be silently skipped. This is a permanent correctness gap — unlike cache staleness which self-heals at TTL expiry — and requires the reconciliation job to be treated as a first-class, monitored requirement rather than an afterthought.
+- **Hot Path**: Leverages existing `BulkLoad` with queue-provided entity IDs. Database load is proportional only to the number of changed entities, avoiding table scans.
+- **Reconciliation**: Uses `AND updated_at > $cursor` on the existing query. A composite index on `(entity_id, updated_at)` ensures efficient index scans, keeping performance stable as the dataset grows.
+- **Main Trade-off**: Dependency on clock monotonicity at the DB layer. Potential for skipped rows due to clock drift or racing writes within the same timestamp, requiring the reconciliation job to be monitored as a critical process.
