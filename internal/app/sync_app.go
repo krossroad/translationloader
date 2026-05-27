@@ -22,6 +22,7 @@ type AppConfig struct {
 
 type SyncApplication struct {
 	syncHandler *SyncHandler
+	pgPool      *pgxpool.Pool
 }
 
 func NewSyncApplication(ctx context.Context, cfg AppConfig) (*SyncApplication, error) {
@@ -43,7 +44,7 @@ func NewSyncApplication(ctx context.Context, cfg AppConfig) (*SyncApplication, e
 	docBuilder := services.NewDocumentBuilder(cachedTranslationLoader)
 	handler := NewSyncHandler(productRepo, docBuilder, cfg.Locales)
 
-	return &SyncApplication{syncHandler: handler}, nil
+	return &SyncApplication{syncHandler: handler, pgPool: pool}, nil
 }
 
 // NewSyncApplicationFromHandler creates a SyncApplication from an already-wired handler.
@@ -66,9 +67,13 @@ func initDB(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func (a *SyncApplication) Close() {}
+func (a *SyncApplication) Close() {
+	if a.pgPool != nil {
+		a.pgPool.Close()
+	}
+}
 
-func (a *SyncApplication) RunSync(ctx context.Context, productIDs []string) ([]dto.ElasticsearchDocument, error) {
+func (a *SyncApplication) BuildProductDocument(ctx context.Context, productIDs []string) ([]dto.ElasticsearchDocument, error) {
 	var results []dto.ElasticsearchDocument
 
 	for _, id := range productIDs {

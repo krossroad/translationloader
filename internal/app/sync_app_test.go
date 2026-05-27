@@ -50,7 +50,7 @@ func TestMapToDTO(t *testing.T) {
 	assert.Equal(t, doc.Attributes["viscosity"], dto.Attributes["viscosity"])
 }
 
-func TestSyncApplication_RunSync(t *testing.T) {
+func TestSyncApplication_BuildProductDocument(t *testing.T) {
 	ctx := context.Background()
 	mockRepo := mocks.NewProductRepository(t)
 	mockBuilder := mocks.NewDocumentBuilder(t)
@@ -77,7 +77,7 @@ func TestSyncApplication_RunSync(t *testing.T) {
 		mockRepo.On("GetSpecificationsByProductID", mock.Anything, "p-2").Return([]domain.ProductSpecification{}, nil).Once()
 		mockBuilder.On("BuildProductDocument", ctx, mock.Anything, mock.Anything, mock.Anything, handlerLocales).Return(doc2, nil).Once()
 
-		res, err := app.RunSync(ctx, productIDs)
+		res, err := app.BuildProductDocument(ctx, productIDs)
 		assert.NoError(t, err)
 		assert.Len(t, res, 2)
 		assert.Equal(t, "p-1", res[0].UUID)
@@ -95,7 +95,7 @@ func TestSyncApplication_RunSync(t *testing.T) {
 		mockRepo.On("GetSpecificationsByProductID", mock.Anything, "p-2").Return([]domain.ProductSpecification{}, nil).Once()
 		mockBuilder.On("BuildProductDocument", ctx, mock.Anything, mock.Anything, mock.Anything, handlerLocales).Return(doc2, nil).Once()
 
-		res, err := app.RunSync(ctx, productIDs)
+		res, err := app.BuildProductDocument(ctx, productIDs)
 		assert.NoError(t, err) // Should continue on per-product error
 		assert.Len(t, res, 1)
 		assert.Equal(t, "p-2", res[0].UUID)

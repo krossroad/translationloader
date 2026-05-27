@@ -24,14 +24,16 @@ func main() {
 
 	cfg := loadConfig()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	syncApp, err := app.NewSyncApplication(ctx, cfg)
 	if err != nil {
 		log.Fatalf("failed to initialize application: %v", err)
 	}
 	defer syncApp.Close()
 
-	docs, err := syncApp.RunSync(ctx, productIDs)
+	docs, err := syncApp.BuildProductDocument(ctx, productIDs)
 	if err != nil {
 		log.Fatalf("sync failed: %v", err)
 	}
