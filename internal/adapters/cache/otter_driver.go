@@ -30,17 +30,26 @@ func NewOtterDriver(capacity int, defaultTTL time.Duration) (ports.CacheDriver, 
 	}, nil
 }
 
-func (d *otterDriver) Get(ctx context.Context, key string) (map[string]domain.Translations, error) {
-	val, ok := d.cache.Get(key)
-	if !ok {
-		return nil, nil
+func (d *otterDriver) Load(
+	ctx context.Context,
+	key string,
+	ttl time.Duration,
+	loader func(context.Context) (map[string]domain.Translations, error),
+) (map[string]domain.Translations, error) {
+	// Fast path: cache hit.
+	if val, ok := d.cache.Get(key); ok {
+		return val, nil
 	}
-	return val, nil
-}
 
-func (d *otterDriver) Set(ctx context.Context, key string, value map[string]domain.Translations, ttl time.Duration) error {
-	d.cache.Set(key, value, ttl)
-	return nil
+	// Slow path: miss — invoke loader and store the result.
+	result, err := loader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if result != nil {
+		d.cache.Set(key, result, ttl)
+	}
+	return result, nil
 }
 
 func (d *otterDriver) Delete(ctx context.Context, key string) error {

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/rikeshs/translationloader/internal/core/domain"
-	"github.com/rikeshs/translationloader/test/mocks"
+	"github.com/rikeshs/translationloader/tests/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -20,32 +20,34 @@ func TestCachedTranslationLoader_BulkLoad(t *testing.T) {
 
 	expectedKey := "id-1"
 
-	expectedTranslationsEN := domain.Translations{
-		{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"},
-	}
-	expectedTranslationsTH := domain.Translations{
-		{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"},
-	}
-
 	t.Run("Cache Miss", func(t *testing.T) {
 		mockUnderlying := mocks.NewTranslationLoader(t)
 		mockDriver := mocks.NewCacheDriver(t)
 		cachedLoader := NewCachedTranslationLoader(mockUnderlying, mockDriver, ttl)
 
-		// nil map = miss
-		mockDriver.On("Get", ctx, expectedKey).Return(nil, nil).Once()
-
 		underlyingRes := map[string]domain.Translations{
-			"id-1": append(expectedTranslationsEN, expectedTranslationsTH...),
+			"id-1": {
+				{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"},
+				{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"},
+			},
 		}
-		mockUnderlying.On("BulkLoad", ctx, entityIDs, locales).Return(underlyingRes, nil).Once()
 
-		// Stored in cache grouped by locale
-		expectedCacheMap := map[string]domain.Translations{
+		// What the driver will return after the loader populates the cache.
+		expectedCached := map[string]domain.Translations{
 			"en": {{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
 			"th": {{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"}},
 		}
-		mockDriver.On("Set", ctx, expectedKey, expectedCacheMap, ttl).Return(nil).Once()
+
+		mockUnderlying.On("BulkLoad", mock.Anything, []string{"id-1"}, locales).Return(underlyingRes, nil).Once()
+
+		// On a miss the driver calls the provided loader, then returns the cached value.
+		mockDriver.On("Load", mock.Anything, expectedKey, ttl,
+			mock.AnythingOfType("func(context.Context) (map[string]domain.Translations, error)")).
+			Run(func(args mock.Arguments) {
+				fn := args.Get(3).(func(context.Context) (map[string]domain.Translations, error))
+				_, _ = fn(ctx) // side-effect: invokes the underlying BulkLoad
+			}).
+			Return(expectedCached, nil).Once()
 
 		res, err := cachedLoader.BulkLoad(ctx, entityIDs, locales)
 		assert.NoError(t, err)
@@ -64,17 +66,21 @@ func TestCachedTranslationLoader_BulkLoad(t *testing.T) {
 			"th": {{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"}},
 		}
 
-		// non-nil map = hit
-		mockDriver.On("Get", ctx, expectedKey).Return(cachedMap, nil).Once()
+		// On a full hit the driver returns the cached value without invoking the loader.
+		mockDriver.On("Load", mock.Anything, expectedKey, ttl,
+			mock.AnythingOfType("func(context.Context) (map[string]domain.Translations, error)")).
+			Return(cachedMap, nil).Once()
 
 		res, err := cachedLoader.BulkLoad(ctx, entityIDs, locales)
 		assert.NoError(t, err)
 
 		expectedRes := map[string]domain.Translations{
-			"id-1": append(expectedTranslationsEN, expectedTranslationsTH...),
+			"id-1": {
+				{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"},
+				{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"},
+			},
 		}
 		assert.Equal(t, expectedRes, res)
-
 		mockUnderlying.AssertNotCalled(t, "BulkLoad", mock.Anything, mock.Anything, mock.Anything)
 	})
 
@@ -83,28 +89,40 @@ func TestCachedTranslationLoader_BulkLoad(t *testing.T) {
 		mockDriver := mocks.NewCacheDriver(t)
 		cachedLoader := NewCachedTranslationLoader(mockUnderlying, mockDriver, ttl)
 
-		// Cache only has "en"
-		cachedMap := map[string]domain.Translations{
-			"en": {{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
-		}
-
-		mockDriver.On("Get", ctx, expectedKey).Return(cachedMap, nil).Once()
-
 		underlyingRes := map[string]domain.Translations{
-			"id-1": append(expectedTranslationsEN, expectedTranslationsTH...),
+			"id-1": {
+				{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"},
+				{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"},
+			},
 		}
-		mockUnderlying.On("BulkLoad", ctx, entityIDs, locales).Return(underlyingRes, nil).Once()
-
-		expectedCacheMap := map[string]domain.Translations{
+		expectedCached := map[string]domain.Translations{
 			"en": {{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
 			"th": {{EntityID: "id-1", Locale: "th", FieldName: "name", FieldValue: "Name TH"}},
 		}
-		mockDriver.On("Set", ctx, expectedKey, expectedCacheMap, ttl).Return(nil).Once()
+
+		// First Load: driver returns a partial cache hit (only "en", missing "th").
+		partialCached := map[string]domain.Translations{
+			"en": {{EntityID: "id-1", Locale: "en", FieldName: "name", FieldValue: "Name EN"}},
+		}
+		mockDriver.On("Load", mock.Anything, expectedKey, ttl,
+			mock.AnythingOfType("func(context.Context) (map[string]domain.Translations, error)")).
+			Return(partialCached, nil).Once()
+
+		mockUnderlying.On("BulkLoad", mock.Anything, []string{"id-1"}, locales).Return(underlyingRes, nil).Once()
+
+		// Partial detected: Delete evicts the stale entry, then Load fetches fresh data via the loader callback.
+		mockDriver.On("Delete", mock.Anything, expectedKey).Return(nil).Once()
+		mockDriver.On("Load", mock.Anything, expectedKey, ttl,
+			mock.AnythingOfType("func(context.Context) (map[string]domain.Translations, error)")).
+			Run(func(args mock.Arguments) {
+				fn := args.Get(3).(func(context.Context) (map[string]domain.Translations, error))
+				_, _ = fn(ctx) // side-effect: invokes the underlying BulkLoad
+			}).
+			Return(expectedCached, nil).Once()
 
 		res, err := cachedLoader.BulkLoad(ctx, entityIDs, locales)
 		assert.NoError(t, err)
 		assert.Equal(t, underlyingRes, res)
-
 		mockDriver.AssertExpectations(t)
 		mockUnderlying.AssertExpectations(t)
 	})

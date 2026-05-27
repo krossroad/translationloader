@@ -22,10 +22,8 @@ func NewDriver(cfg Config) (ports.CacheDriver, error) {
 	}
 
 	switch cfg.Driver {
-	case "otter":
+	case "otter", "":
 		return NewOtterDriver(cfg.Capacity, cfg.TTL)
-	case "memory", "":
-		return NewMemoryDriver(), nil
 	default:
 		return nil, fmt.Errorf("unknown cache driver: %s", cfg.Driver)
 	}

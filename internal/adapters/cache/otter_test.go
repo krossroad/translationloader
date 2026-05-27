@@ -10,59 +10,59 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOtterDriver(t *testing.T) {
+// TestOtterDriver_Load verifies the new Load method on the otter driver.
+//
+// NOTE: This test will NOT compile until ports.CacheDriver gains a Load method
+// and otterDriver implements it. That compile failure is intentional — it
+// documents the new interface requirement.
+func TestOtterDriver_Load(t *testing.T) {
 	ctx := context.Background()
 	ttl := 1 * time.Minute
 	capacity := 10
 
-	t.Run("Set and Get Map Value", func(t *testing.T) {
+	t.Run("Load Miss then Hit", func(t *testing.T) {
 		driver, err := NewOtterDriver(capacity, ttl)
 		require.NoError(t, err)
 
-		key := "test-entity-1"
-		value := map[string]domain.Translations{
-			"en": {{EntityID: "test-entity-1", Locale: "en", FieldName: "label", FieldValue: "V1"}},
-			"fr": {{EntityID: "test-entity-1", Locale: "fr", FieldName: "label", FieldValue: "V2"}},
+		callCount := 0
+		loader := func(lctx context.Context) (map[string]domain.Translations, error) {
+			callCount++
+			return map[string]domain.Translations{
+				"en": {{EntityID: "E1", Locale: "en", FieldName: "label", FieldValue: "V1"}},
+			}, nil
 		}
 
-		err = driver.Set(ctx, key, value, ttl)
-		assert.NoError(t, err)
-
-		got, err := driver.Get(ctx, key)
+		// First call: miss, loader invoked.
+		got, err := driver.Load(ctx, "k1", ttl, loader)
 		assert.NoError(t, err)
 		assert.NotNil(t, got)
-		assert.Equal(t, value, got)
+		assert.Equal(t, 1, callCount)
+
+		// Second call: hit, loader NOT invoked again.
+		got2, err := driver.Load(ctx, "k1", ttl, loader)
+		assert.NoError(t, err)
+		assert.Equal(t, got, got2)
+		assert.Equal(t, 1, callCount, "loader must not be called on cache hit")
 	})
 
-	t.Run("Delete", func(t *testing.T) {
+	t.Run("Delete clears entry", func(t *testing.T) {
 		driver, err := NewOtterDriver(capacity, ttl)
 		require.NoError(t, err)
 
-		key := "test-key-delete"
-		value := map[string]domain.Translations{
-			"en": {{EntityID: "E1", Locale: "en", FieldName: "label", FieldValue: "V1"}},
+		loaded := map[string]domain.Translations{
+			"en": {{EntityID: "E2", Locale: "en", FieldName: "label", FieldValue: "V1"}},
 		}
+		_, _ = driver.Load(ctx, "k2", ttl, func(lctx context.Context) (map[string]domain.Translations, error) {
+			return loaded, nil
+		})
 
-		_ = driver.Set(ctx, key, value, ttl)
-		err = driver.Delete(ctx, key)
-		assert.NoError(t, err)
+		assert.NoError(t, driver.Delete(ctx, "k2"))
 
-		got, err := driver.Get(ctx, key)
-		assert.NoError(t, err)
-		assert.Nil(t, got)
-	})
-
-	t.Run("Eviction", func(t *testing.T) {
-		smallCapacity := 2
-		driver, err := NewOtterDriver(smallCapacity, ttl)
-		require.NoError(t, err)
-
-		val := map[string]domain.Translations{"en": {{EntityID: "E1"}}}
-		_ = driver.Set(ctx, "k1", val, ttl)
-		_ = driver.Set(ctx, "k2", val, ttl)
-		_ = driver.Set(ctx, "k3", val, ttl)
-
-		// Verification of eviction depends on Otter's internal state.
-		// For unit tests, we primarily care that it compiles and basic operations work with maps.
+		callCount := 0
+		_, _ = driver.Load(ctx, "k2", ttl, func(lctx context.Context) (map[string]domain.Translations, error) {
+			callCount++
+			return nil, nil
+		})
+		assert.Equal(t, 1, callCount, "loader must be called after Delete")
 	})
 }

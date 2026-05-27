@@ -8,14 +8,22 @@ import (
 )
 
 func TestNewDriver(t *testing.T) {
-	t.Run("Default to memory driver", func(t *testing.T) {
+	t.Run("Default to otter driver (empty string)", func(t *testing.T) {
 		cfg := Config{
-			Driver: "memory",
-			TTL:    5 * time.Minute,
+			Driver:   "",
+			TTL:      5 * time.Minute,
+			Capacity: 100,
 		}
 		driver, err := NewDriver(cfg)
 		assert.NoError(t, err)
 		assert.NotNil(t, driver)
+	})
+
+	t.Run("memory driver returns error", func(t *testing.T) {
+		cfg := Config{Driver: "memory"}
+		_, err := NewDriver(cfg)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown cache driver")
 	})
 
 	t.Run("Select otter driver", func(t *testing.T) {
