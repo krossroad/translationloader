@@ -3,6 +3,12 @@ BINARY_NAME=sync
 BIN_DIR=bin
 MAIN_PATH=cmd/sync/main.go
 
+# Load .env file if it exists
+ifneq (,$(wildcard .env))
+    include .env
+    export $(shell sed 's/=.*//' .env)
+endif
+
 # Go parameters
 GOCMD=go
 GOBUILD=$(GOCMD) build
@@ -22,7 +28,7 @@ clean: ## Remove binary and coverage files
 	rm -rf $(BIN_DIR)
 	rm -f coverage.out
 
-run: ## Run the application
+run: docker-up ## Run the application (use DATABASE_URL=... make run, or create .env file)
 	$(GOCMD) run $(MAIN_PATH)
 
 test: ## Run all tests
