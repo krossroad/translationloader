@@ -14,15 +14,18 @@ import (
 	"github.com/rikeshs/translationloader/internal/app"
 )
 
-var localesFlag = flag.String("locales", "", "Comma-separated list of locales (overrides SUPPORTED_LOCALES)")
+var (
+	localesFlag = flag.String("locales", "", "Comma-separated list of locales: Defaults to 'en'")
+	prodIDArgs  = flag.String("products", "", "Comma-separated list of product-ids")
+)
 
 func main() {
 	flag.Parse()
-	productIDs := flag.Args()
-	if len(productIDs) == 0 {
-		fmt.Println("Usage: sync [product_ids...]")
+	if *prodIDArgs == "" {
+		fmt.Println("Usage: sync --products id1,id2")
 		os.Exit(1)
 	}
+	productIDs := strings.Split(*prodIDArgs, ",")
 
 	cfg := loadConfig()
 
@@ -52,11 +55,9 @@ func loadConfig() app.AppConfig {
 		log.Fatal("DATABASE_URL environment variable is not set")
 	}
 
-	locales := []string{"en", "th"}
+	locales := []string{"en"}
 	if *localesFlag != "" {
 		locales = strings.Split(*localesFlag, ",")
-	} else if envLocales := os.Getenv("SUPPORTED_LOCALES"); envLocales != "" {
-		locales = strings.Split(envLocales, ",")
 	}
 
 	ttlStr := os.Getenv("CACHE_TTL")
