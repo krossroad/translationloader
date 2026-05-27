@@ -29,7 +29,7 @@ clean: ## Remove binary and coverage files
 	rm -f coverage.out
 
 run: docker-up ## Run the application (use DATABASE_URL=... make run, or create .env file)
-	$(GOCMD) run $(MAIN_PATH)
+	$(GOCMD) run $(MAIN_PATH) $(ARGS)
 
 test: ## Run all tests
 	$(GOTEST) -v -tags=integration ./...
