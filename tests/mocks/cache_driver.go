@@ -34,52 +34,34 @@ func (_m *CacheDriver) Delete(ctx context.Context, key string) error {
 	return r0
 }
 
-// Get provides a mock function with given fields: ctx, key
-func (_m *CacheDriver) Get(ctx context.Context, key string) (map[string]domain.Translations, error) {
-	ret := _m.Called(ctx, key)
+// Load provides a mock function with given fields: ctx, key, ttl, loader
+func (_m *CacheDriver) Load(ctx context.Context, key string, ttl time.Duration, loader func(context.Context) (map[string]domain.Translations, error)) (map[string]domain.Translations, error) {
+	ret := _m.Called(ctx, key, ttl, loader)
 
 	if len(ret) == 0 {
-		panic("no return value specified for Get")
+		panic("no return value specified for Load")
 	}
 
 	var r0 map[string]domain.Translations
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (map[string]domain.Translations, error)); ok {
-		return rf(ctx, key)
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Duration, func(context.Context) (map[string]domain.Translations, error)) (map[string]domain.Translations, error)); ok {
+		return rf(ctx, key, ttl, loader)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) map[string]domain.Translations); ok {
-		r0 = rf(ctx, key)
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Duration, func(context.Context) (map[string]domain.Translations, error)) map[string]domain.Translations); ok {
+		r0 = rf(ctx, key, ttl, loader)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(map[string]domain.Translations)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, key)
+	if rf, ok := ret.Get(1).(func(context.Context, string, time.Duration, func(context.Context) (map[string]domain.Translations, error)) error); ok {
+		r1 = rf(ctx, key, ttl, loader)
 	} else {
 		r1 = ret.Error(1)
 	}
 
 	return r0, r1
-}
-
-// Set provides a mock function with given fields: ctx, key, value, ttl
-func (_m *CacheDriver) Set(ctx context.Context, key string, value map[string]domain.Translations, ttl time.Duration) error {
-	ret := _m.Called(ctx, key, value, ttl)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Set")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, map[string]domain.Translations, time.Duration) error); ok {
-		r0 = rf(ctx, key, value, ttl)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
 }
 
 // NewCacheDriver creates a new instance of CacheDriver. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
