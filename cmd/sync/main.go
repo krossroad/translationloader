@@ -14,6 +14,8 @@ import (
 	"github.com/rikeshs/translationloader/internal/app"
 )
 
+var localesFlag = flag.String("locales", "", "Comma-separated list of locales (overrides SUPPORTED_LOCALES)")
+
 func main() {
 	flag.Parse()
 	productIDs := flag.Args()
@@ -51,7 +53,9 @@ func loadConfig() app.AppConfig {
 	}
 
 	locales := []string{"en", "th"}
-	if envLocales := os.Getenv("SUPPORTED_LOCALES"); envLocales != "" {
+	if *localesFlag != "" {
+		locales = strings.Split(*localesFlag, ",")
+	} else if envLocales := os.Getenv("SUPPORTED_LOCALES"); envLocales != "" {
 		locales = strings.Split(envLocales, ",")
 	}
 
